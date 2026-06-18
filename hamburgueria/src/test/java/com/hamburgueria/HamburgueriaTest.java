@@ -549,3 +549,112 @@ public class HamburgueriaTest {
     }
 
 
+    @Test
+    void controleDeAcessoAoCardapio() {
+        CardapioProxy proxy = new CardapioProxy();
+
+        assertTrue(proxy.listarItens().isEmpty());
+
+        proxy.setUsuarioAtual(new FuncionarioAcesso(
+                "João", FuncionarioAcesso.Perfil.CLIENTE, "1234"));
+
+        List<String> itens = proxy.listarItens();
+        assertFalse(itens.isEmpty()); // lazy init funcionou
+        List<String> itensCached = proxy.listarItens();
+        assertEquals(itens.size(), itensCached.size());
+        assertFalse(proxy.buscarItem("Smash Burguer").contains("não encontrado"));
+        assertTrue(proxy.consultarPreco("X-Burguer") > 0);
+        proxy.adicionarItem("Lanche VIP", 99.90);
+        assertEquals(-1.0, proxy.consultarPreco("Lanche VIP"), 0.01);
+
+        proxy.setUsuarioAtual(new FuncionarioAcesso(
+                "Carlos", FuncionarioAcesso.Perfil.GERENTE,"9999"));
+        proxy.adicionarItem("Truffle Burguer", 75.90);
+        assertTrue(proxy.consultarPreco("Truffle Burguer") > 0);
+
+        proxy.atualizarPreco("X-Burguer", 31.90);
+        assertEquals(31.90, proxy.consultarPreco("X-Burguer"), 0.01);
+
+        proxy.removerItem("Onion Rings");
+        assertTrue(proxy.buscarItem("Onion Rings").contains("não encontrado"));
+
+        ICardapio cardapio = proxy;
+        assertTrue(cardapio.consultarPreco("Smash Burguer") > 0);
+    }
+
+
+    @Test
+    void calculadoraDeExpressoesDePreco() {
+        ExpressaoCardapio smash  = new ValorNumerico(45.90, "Smash Burguer");
+        ExpressaoCardapio xBurg  = new ValorNumerico(28.90, "X-Burguer");
+        ExpressaoCardapio batata = new ValorNumerico(9.90,  "Batata Frita P");
+        ExpressaoCardapio refri  = new ValorNumerico(6.90,  "Refri 350ml");
+
+        assertEquals(45.90, smash.interpretar(), 0.01);
+        assertEquals("Smash Burguer", smash.representar());
+
+        ExpressaoCardapio soma = new Adicao(smash, batata);
+        assertEquals(55.80, soma.interpretar(), 0.01);
+        assertTrue(soma.representar().contains("+"));
+
+        ExpressaoCardapio sub = new Subtracao(
+                new ValorNumerico(100.00,"total"),
+                new ValorNumerico(15.00, "desconto"));
+        assertEquals(85.00, sub.interpretar(), 0.01);
+
+        ExpressaoCardapio subNeg = new Subtracao(
+                new ValorNumerico(10.00,"base"),
+                new ValorNumerico(50.00,"desconto"));
+        assertEquals(0.00, subNeg.interpretar(), 0.01);
+
+        ExpressaoCardapio mult = new Multiplicacao(
+                new ValorNumerico(3,"3x"), smash);
+        assertEquals(137.70, mult.interpretar(), 0.01);
+
+        ExpressaoCardapio div = new Divisao(
+                new ValorNumerico(100.00,"total"),
+                new ValorNumerico(4,"4 pessoas"));
+        assertEquals(25.00, div.interpretar(), 0.01);
+
+        ExpressaoCardapio divZero = new Divisao(
+                new ValorNumerico(100.00,"v"),
+                new ValorNumerico(0,"zero"));
+        assertEquals(0.00, divZero.interpretar(), 0.01);
+
+        ExpressaoCardapio perc = new Percentual(
+                new ValorNumerico(200.00,"base"),
+                new ValorNumerico(10,"10"));
+        assertEquals(20.00, perc.interpretar(), 0.01);
+
+        ExpressaoCardapio subTotal = new Adicao(
+                new Multiplicacao(new ValorNumerico(3,"3x"), smash),
+                new Multiplicacao(new ValorNumerico(2,"2x"), batata));
+        assertEquals(157.50, subTotal.interpretar(), 0.01);
+
+        ExpressaoCardapio desc15   = new Percentual(subTotal, new ValorNumerico(15,"15"));
+        ExpressaoCardapio aposDesc = new Subtracao(subTotal, desc15);
+        ExpressaoCardapio comTaxa  = new Adicao(aposDesc, new ValorNumerico(8.50,"taxa"));
+        assertEquals(142.375, comTaxa.interpretar(), 0.01);
+
+        CalculadoraCardapio calc = new CalculadoraCardapio();
+        assertEquals(55.80, calc.calcular(calc.totalCombo(45.90, 9.90)), 0.01);
+        assertEquals(85.00, calc.calcular(calc.aplicarDesconto(100.00, 15)), 0.01);
+        assertEquals(25.00, calc.calcular(calc.dividirConta(100.00, 4)), 0.01);
+        assertEquals(115.60,calc.calcular(calc.totalComQuantidade(28.90, 4)), 0.01);
+
+        PedidoInterpreter pedido = new PedidoInterpreter("P-001","João");
+        pedido.adicionarExpressao(smash);
+        pedido.adicionarExpressao(batata);
+        pedido.adicionarExpressao(refri);
+        assertEquals(62.70, pedido.calcularTotal(), 0.01);
+
+        HamburgueriaInterpreter burger = new HamburgueriaInterpreter("Burger House");
+        PedidoInterpreter p1 = new PedidoInterpreter("P-001","Ana");
+        p1.adicionarExpressao(smash); p1.adicionarExpressao(refri);
+        PedidoInterpreter p2 = new PedidoInterpreter("P-002","Pedro");
+        p2.adicionarExpressao(xBurg); p2.adicionarExpressao(batata);
+        burger.adicionarPedido(p1); burger.adicionarPedido(p2);
+        assertEquals(91.60, burger.calcularFaturamentoDoDia(), 0.01);
+        assertEquals(45.80, burger.calcularTicketMedio(), 0.01);
+    }
+}
