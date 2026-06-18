@@ -371,3 +371,148 @@ public class HamburgueriaTest {
     }
 
 
+    @Test
+    void navegacaoPeloCardapio() {
+        CardapioHamburgueria card = new CardapioHamburgueria();
+        card.adicionarItem(new ItemPedido("Smash Burguer","Lanches",45.90,850,true));
+        card.adicionarItem(new ItemPedido("X-Burguer",    "Lanches",28.90,620,true));
+        card.adicionarItem(new ItemPedido("Batata Frita P","Acomps", 9.90,320,true));
+        card.adicionarItem(new ItemPedido("Onion Rings",  "Acomps", 16.90,410,false));
+        card.adicionarItem(new ItemPedido("Refri 350ml",  "Bebidas", 6.90,140,true));
+
+        Iterador it = card.criarIterador();
+        int count = 0;
+        while (it.temProximo()) { it.proximo(); count++; }
+        assertEquals(5, count);
+
+        it.reiniciar();
+        assertTrue(it.temProximo());
+
+        Iterador itL = card.criarIteradorPorCategoria("Lanches");
+        int qtdLanches = 0;
+        while (itL.temProximo()) { itL.proximo(); qtdLanches++; }
+        assertEquals(2, qtdLanches);
+
+        IteradorDisponiveis itD = (IteradorDisponiveis) card.criarIteradorDisponiveis();
+        assertEquals(4, itD.totalDisponiveis());
+
+        Iterador itP = card.criarIteradorPorFaixaPreco(5.00, 15.00);
+        int qtdFaixa = 0;
+        while (itP.temProximo()) { itP.proximo(); qtdFaixa++; }
+        assertEquals(2, qtdFaixa); // Batata e Refri
+
+        assertFalse(card.criarIteradorPorCategoria("Cafeteria").temProximo());
+    }
+
+
+    @Test
+    void clonagemdePedidos() {
+        EnderecoEntrega end   = new EnderecoEntrega("Rua X","10","Centro","JF","");
+        EnderecoEntrega clone = end.clonar();
+
+        assertNotSame(end, clone);
+        assertEquals(end.toString(), clone.toString());
+
+        clone.setRua("Av. Brasil");
+        assertNotEquals(end.getRua(), clone.getRua()); // clone independente
+
+        PedidoTemplate orig = new PedidoTemplate("João","Pix","",true,
+                new EnderecoEntrega("Rua Y","1","Bairro","JF",""));
+        orig.adicionarItem("X-Burguer");
+        PedidoTemplate copia = orig.clonar();
+
+        assertNotSame(orig, copia);
+        assertNotSame(orig.getEndereco(), copia.getEndereco()); // deep copy
+        copia.adicionarItem("Batata");
+        assertNotEquals(orig.getItens().size(), copia.getItens().size());
+
+        RegistroPedidos reg = new RegistroPedidos();
+        PedidoTemplate tVeg = new PedidoTemplate("Cliente","Pix","",false,null);
+        tVeg.adicionarItem("Green Burguer");
+        reg.registrar("vegano", tVeg);
+
+        PedidoTemplate c1 = reg.clonarTemplate("vegano");
+        PedidoTemplate c2 = reg.clonarTemplate("vegano");
+        assertNotSame(c1, c2);
+        c1.adicionarItem("Suco");
+        assertNotEquals(c1.getItens().size(), tVeg.getItens().size());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> reg.clonarTemplate("inexistente"));
+    }
+
+
+    @BeforeEach
+    void limparCacheFlyweight() {
+        IngredienteFactory.limparCache();
+    }
+
+    @Test
+    void compartilhamentoDeIngredientes() {
+        Ingrediente pao   = IngredienteFactory.obter("Pão Brioche",    "Pão",      1.50,200,"Macio");
+        Ingrediente carne = IngredienteFactory.obter("Blend 180g",     "Carne",    8.00,400,"Bovino");
+        Ingrediente queij = IngredienteFactory.obter("Queijo Cheddar", "Laticínio",2.00, 90,"Cremoso");
+
+        assertSame(pao,   IngredienteFactory.obter("Pão Brioche"));
+        assertSame(carne, IngredienteFactory.obter("Blend 180g"));
+        assertSame(queij, IngredienteFactory.obter("Queijo Cheddar"));
+        assertEquals(3, IngredienteFactory.totalInstancias());
+
+        Pedido p1 = new Pedido("001","João");
+        Pedido p2 = new Pedido("002","Maria");
+        p1.adicionarIngrediente(pao,1); p1.adicionarIngrediente(carne,1);
+        p2.adicionarIngrediente(pao,1); p2.adicionarIngrediente(queij,1);
+
+        assertEquals(3, IngredienteFactory.totalInstancias());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> IngredienteFactory.obter("Trufas Negras"));
+    }
+
+
+    @Test
+    void filaDeComandasDaCozinha() {
+        FilaCozinha fila = new FilaCozinha();
+        PedidoCozinha pedido = new PedidoCozinha("001","João");
+
+        fila.executar(new AbrirPedidoComando(pedido));
+        assertEquals("ABERTO", pedido.getStatus());
+
+        fila.executar(new AdicionarItemComando(pedido,"Smash Burguer"));
+        assertTrue(pedido.getItens().contains("Smash Burguer"));
+
+        fila.executar(new IniciarPreparoComando(pedido));
+        assertEquals("EM_PREPARO", pedido.getStatus());
+
+        fila.executar(new FinalizarPreparoComando(pedido));
+        assertEquals("PRONTO", pedido.getStatus());
+
+        fila.desfazerUltimo();
+        assertEquals("EM_PREPARO", pedido.getStatus());
+
+        PedidoCozinha p2 = new PedidoCozinha("002","Maria");
+        FilaCozinha fb = new FilaCozinha();
+        fb.enfileirar(new AbrirPedidoComando(p2));
+        fb.enfileirar(new AdicionarItemComando(p2,"X-Burguer"));
+        fb.enfileirar(new FecharPedidoComando(p2));
+        assertEquals(3, fb.totalNaFila());
+
+        fb.executarFila();
+        assertEquals("FECHADO", p2.getStatus());
+        assertEquals(0, fb.totalNaFila());
+
+        fb.desfazerTodos();
+        assertEquals("CANCELADO", p2.getStatus());
+
+        PedidoCozinha p3 = new PedidoCozinha("003","Carlos");
+        FilaCozinha fc = new FilaCozinha();
+        fc.executar(new AbrirPedidoComando(p3));
+        fc.executar(new CancelarPedidoComando(p3));
+        assertEquals("CANCELADO", p3.getStatus());
+        fc.desfazerUltimo(); // desfaz o cancelar → chama abrir()
+        assertEquals("ABERTO", p3.getStatus());
+
+        assertDoesNotThrow(() -> new FilaCozinha().desfazerUltimo());
+    }
+
+
