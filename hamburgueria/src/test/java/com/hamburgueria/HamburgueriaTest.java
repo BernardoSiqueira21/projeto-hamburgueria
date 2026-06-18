@@ -516,3 +516,36 @@ public class HamburgueriaTest {
     }
 
 
+    @Test
+    void integracaoDePagamentoEEntrega() {
+        iPagamento pix = new PagamentoPix();
+        assertTrue(pix.processar("João", 45.90));
+        assertEquals("Pix", pix.getFormaPagamento());
+        assertNotNull(pix.getComprovante());
+
+        iPagamento cartao = new PagamentoCartao("Crédito");
+        assertTrue(cartao.processar("Maria", 89.80));
+        assertEquals("Cartão Crédito", cartao.getFormaPagamento());
+
+        iPagamento legado = new PagamentoLegadoAdapter(
+                new SistemaPagamentoLegado(), "123.456.789-00");
+        assertTrue(legado.processar("Ana", 67.40));
+        assertEquals("Sistema Legado (via Adapter)", legado.getFormaPagamento());
+        assertNotNull(legado.getComprovante());
+
+        iEntrega entrega = new EntregaExternaAdapter(new SistemaEntregaExterna());
+        assertTrue(entrega.despachar("Rua das Flores, 42","36000-000"));
+        assertNotNull(entrega.getRastreamento());
+        assertTrue(entrega.getTaxaEntrega("36000-000") > 0);
+
+        List<iPagamento> formas = List.of(
+                new PagamentoPix(),
+                new PagamentoCartao("Débito"),
+                new PagamentoLegadoAdapter(new SistemaPagamentoLegado(),"000.000.000-00")
+        );
+        for (iPagamento f : formas) {
+            assertTrue(f.processar("Teste", 10.00));
+        }
+    }
+
+
