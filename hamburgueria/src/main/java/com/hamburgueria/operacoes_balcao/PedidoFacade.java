@@ -3,46 +3,41 @@ package com.hamburgueria.operacoes_balcao;
 import com.hamburgueria.fila_cozinha.*;
 import com.hamburgueria.configuracoes.Configuracoes;
 import com.hamburgueria.calculo_preco.*;
+import com.hamburgueria.pagamento_entrega.*;
 
 public class PedidoFacade {
 
-    private final SetorEstoque   estoque   = new SetorEstoque();
-    private final SetorCozinha   cozinha   = new SetorCozinha();
-    private final SetorPagamento pagamento = new SetorPagamento();
-    private final SetorEntrega   entrega   = new SetorEntrega();
-
+    private final SetorEstoque   estoque     = new SetorEstoque();
+    private final SetorCozinha   cozinha     = new SetorCozinha();
+    private final SetorPagamento pagamento   = new SetorPagamento();
+    private final SetorEntrega   entrega     = new SetorEntrega();
     private final FilaCozinha    filaCozinha = new FilaCozinha();
     private final Calculadora    calculadora = new Calculadora(new OperacaoSemDesconto());
 
     public void realizarPedidoBalcao(String cliente, String lanche,
                                      double valor, String formaPagamento) {
         int tempoPreparo = Configuracoes.getInstance().getTempoMedioPreparo();
-
         estoque.verificarDisponibilidade("Blend 180g");
-        estoque.verificarDisponibilidade("Pão Brioche");
         estoque.reservarIngrediente("Blend 180g", 1);
-        estoque.reservarIngrediente("Pão Brioche", 1);
 
         PedidoCozinha pedido = new PedidoCozinha("BAL-" + System.currentTimeMillis(), cliente);
         filaCozinha.executar(new AbrirPedidoComando(pedido));
         filaCozinha.executar(new AdicionarItemComando(pedido, lanche));
         filaCozinha.executar(new IniciarPreparoComando(pedido));
 
-        boolean pago = pagamento.processarPagamento(cliente, valor, formaPagamento);
+        // Adapter: processa pagamento via interface iPagamento
+        iPagamento formaPag = resolverFormaPagamento(formaPagamento);
+        boolean pago = formaPag.processar(cliente, valor);
         if (pago) {
-            pagamento.emitirComprovante(cliente, valor);
             cozinha.registrarTempoMedio(tempoPreparo);
             filaCozinha.executar(new FinalizarPreparoComando(pedido));
             filaCozinha.executar(new FecharPedidoComando(pedido));
-            cozinha.notificarPronto(lanche);
         }
     }
 
     public void realizarPedidoDelivery(String cliente, String lanche, double valor,
-                                       String formaPagamento, String endereco, String bairro) {
+                                       String formaPagamento, String endereco, String cep) {
         double taxaBase = Configuracoes.getInstance().getTaxaEntrega();
-
-        estoque.verificarDisponibilidade("Blend 180g");
         estoque.reservarIngrediente("Blend 180g", 1);
 
         calculadora.setOperacao(new OperacaoTaxaEntrega(taxaBase));
@@ -52,13 +47,14 @@ public class PedidoFacade {
         filaCozinha.executar(new AbrirPedidoComando(pedido));
         filaCozinha.executar(new AdicionarItemComando(pedido, lanche));
 
-        boolean pago = pagamento.processarPagamento(cliente, totalComTaxa, formaPagamento);
+        iPagamento formaPag = resolverFormaPagamento(formaPagamento);
+        boolean pago = formaPag.processar(cliente, totalComTaxa);
         if (pago) {
-            pagamento.emitirComprovante(cliente, totalComTaxa);
             filaCozinha.executar(new IniciarPreparoComando(pedido));
             filaCozinha.executar(new FinalizarPreparoComando(pedido));
-            entrega.registrarEndereço(cliente, endereco);
-            entrega.despacharEntregador(cliente);
+
+            iEntrega entregaAdapter = new EntregaExternaAdapter(new SistemaEntregaExterna());
+            entregaAdapter.despachar(endereco, cep);
             filaCozinha.executar(new FecharPedidoComando(pedido));
         }
     }
@@ -66,13 +62,18 @@ public class PedidoFacade {
     public void cancelarPedido(String cliente, double valorReembolso) {
         calculadora.setOperacao(new OperacaoDesconto(100));
         calculadora.calcular(valorReembolso);
-        pagamento.emitirComprovante(cliente + " [REEMBOLSO]", valorReembolso);
         estoque.emitirAlertaEstoqueBaixo();
     }
 
-    public void fecharCaixaDoDia() {
-        estoque.emitirAlertaEstoqueBaixo();
-    }
+    public void fecharCaixaDoDia() { estoque.emitirAlertaEstoqueBaixo(); }
 
     public FilaCozinha getFilaCozinha() { return filaCozinha; }
+
+    private iPagamento resolverFormaPagamento(String forma) {
+        return switch (forma.toLowerCase()) {
+            case "pix"     -> new PagamentoPix();
+            case "legado"  -> new PagamentoLegadoAdapter(new SistemaPagamentoLegado(), "000.000.000-00");
+            default        -> new PagamentoCartao(forma);
+        };
+    }
 }

@@ -1,5 +1,9 @@
 package com.hamburgueria.auditoria_cardapio;
 
+import com.hamburgueria.navegacao_cardapio.CardapioHamburgueria;
+import com.hamburgueria.navegacao_cardapio.Iterador;
+import com.hamburgueria.navegacao_cardapio.ItemPedido;
+
 public class VisitanteRelatorio implements Visitante {
 
     private double totalItens   = 0;
@@ -25,6 +29,15 @@ public class VisitanteRelatorio implements Visitante {
     @Override
     public void visitar(Promocao promocao) {
         qtdPromocoes++;
+    }
+
+    public void gerarRelatorioCompleto(CardapioHamburgueria cardapio) {
+        Iterador iterador = cardapio.criarIteradorDisponiveis();
+        while (iterador.temProximo()) {
+            ItemPedido item = iterador.proximo();
+            totalItens += item.getPreco();
+            qtdItens++;
+        }
     }
 
     public double getTotalItens()   { return totalItens; }
