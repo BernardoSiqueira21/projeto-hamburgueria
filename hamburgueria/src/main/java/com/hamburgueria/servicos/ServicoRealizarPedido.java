@@ -1,10 +1,9 @@
 package com.hamburgueria.servicos;
 
 public class ServicoRealizarPedido implements IServico {
+
     @Override
-    public void executar() {
-        System.out.println("[ServicoRealizarPedido] Registrando novo pedido no sistema...");
-    }
+    public void executar() {}
 
     @Override
     public String getNome() { return "RealizarPedido"; }
