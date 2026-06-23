@@ -1,6 +1,6 @@
 # Hamburgueria - 23 Padroes de Projeto em Java
 
-Projeto academico desenvolvido em Java que implementa os 23 padroes de projeto GoF aplicados ao dominio de uma hamburgueria. Cada pacote do projeto representa um conceito do negocio e contem a implementacao de um padrao especifico, sem expor o nome do padrao nas classes.
+Projeto academico desenvolvido em Java que implementa os 23 padroes de projeto GoF aplicados ao dominio de uma hamburgueria. Cada pacote do projeto representa um conceito do negocio .
 
 O projeto cobre os tres grupos de padroes: criacionais, estruturais e comportamentais. Alguns padroes foram integrados entre si, como a Facade que coordena Command, Strategy e Singleton ao mesmo tempo, ou o Observer que avanca o State do pedido e notifica os clientes automaticamente.
 
